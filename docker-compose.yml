@@ -5,9 +5,16 @@ services:
     restart: unless-stopped
     environment:
       - DATA_DIR=/data
-      # Point at a config on the volume to keep credentials out of the image:
-      # - CONFIG_PATH=/data/config.json
       - TZ=Europe/Istanbul
+      # Credentials, set these in your host's secret store rather than here:
+      # - TELEGRAM_BOT_TOKEN=
+      # - TELEGRAM_CHAT_ID=
+      # - SMTP_HOST=
+      # - SMTP_USER=
+      # - SMTP_PASSWORD=
+      # - SMTP_TO=
+      # Alternatively keep the whole config on the volume:
+      # - CONFIG_PATH=/data/config.json
     volumes:
       - tracker_data:/data
     # The service does no work by itself. Scheduled tasks exec into it:

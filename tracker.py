@@ -55,6 +55,18 @@ TOP_LIST_MAX_DISCOUNT = 100.0
 TELEGRAM_LIMIT = 3900
 TELEGRAM_CHUNK_DELAY = 0.5
 
+# Credentials can come from the environment instead of the config file so
+# they stay out of the image and out of version control.
+ENV_OVERRIDES = {
+    "TELEGRAM_BOT_TOKEN": ("telegram", "bot_token"),
+    "TELEGRAM_CHAT_ID": ("telegram", "chat_id"),
+    "SMTP_HOST": ("smtp", "host"),
+    "SMTP_PORT": ("smtp", "port"),
+    "SMTP_USER": ("smtp", "user"),
+    "SMTP_PASSWORD": ("smtp", "password"),
+    "SMTP_TO": ("smtp", "to"),
+}
+
 DEFAULTS = {
     "drop_threshold_percent": 5.0,
     "rise_threshold_percent": 10.0,
@@ -108,6 +120,12 @@ def load_config():
     cfg.setdefault("smtp", {})
     cfg.setdefault("telegram", {})
     cfg.setdefault("stores", [])
+
+    for name, (section, key) in ENV_OVERRIDES.items():
+        value = os.environ.get(name)
+        if value:
+            cfg[section][key] = value
+
     return cfg
 
 

@@ -98,6 +98,17 @@ Mail and Telegram are both optional and independent. Leave `smtp.host` or
 still goes out. Reports longer than Telegram's message limit are split across
 several messages.
 
+Credentials can come from the environment instead of the config file, which is
+what you want when the config is committed or baked into an image:
+
+```
+TELEGRAM_BOT_TOKEN   TELEGRAM_CHAT_ID
+SMTP_HOST   SMTP_PORT   SMTP_USER   SMTP_PASSWORD   SMTP_TO
+```
+
+Anything set here overrides the matching field in `config.json`. Empty values
+are ignored, so an unset variable falls back to the file.
+
 ## Output
 
 Everything lands under `DATA_DIR` (defaults to the script directory):
@@ -168,10 +179,17 @@ python tracker.py --run
 python tracker.py --report
 ```
 
-To keep credentials out of the image, put a filled-in config on the volume at
-`/data/config.json` and set `CONFIG_PATH=/data/config.json`. The `config.json`
-in this repository is committed without secrets because the Dockerfile copies
-it at build time.
+The `config.json` in this repository is committed without secrets because the
+Dockerfile copies it at build time. Supply the real credentials as environment
+variables instead:
+
+```
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+```
+
+If you would rather keep the whole config outside the image, put a filled-in
+copy on the volume at `/data/config.json` and set `CONFIG_PATH=/data/config.json`.
 
 Standalone, without an orchestrator:
 
