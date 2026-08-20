@@ -1,0 +1,8 @@
+tracker.db
+logs/
+exports/
+reports/
+data/
+__pycache__/
+.git/
+*.md

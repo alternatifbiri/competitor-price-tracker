@@ -1,0 +1,19 @@
+services:
+  tracker:
+    build: .
+    container_name: price-tracker
+    restart: unless-stopped
+    environment:
+      - DATA_DIR=/data
+      # Point at a config on the volume to keep credentials out of the image:
+      # - CONFIG_PATH=/data/config.json
+      - TZ=Europe/Istanbul
+    volumes:
+      - tracker_data:/data
+    # The service does no work by itself. Scheduled tasks exec into it:
+    #   python tracker.py --run
+    #   python tracker.py --report
+    command: ["sleep", "infinity"]
+
+volumes:
+  tracker_data:
