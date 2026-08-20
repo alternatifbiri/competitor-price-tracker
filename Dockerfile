@@ -6,7 +6,7 @@ WORKDIR /app
 # on every redeploy.
 ENV DATA_DIR=/data \
     PYTHONUNBUFFERED=1 \
-    TZ=Europe/Istanbul
+    TZ=UTC
 
 RUN pip install --no-cache-dir "httpx>=0.27,<0.29"
 

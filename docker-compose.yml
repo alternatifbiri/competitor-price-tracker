@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       - DATA_DIR=/data
-      - TZ=Europe/Istanbul
+      - TZ=UTC
       # Credentials, set these in your host's secret store rather than here:
       # - TELEGRAM_BOT_TOKEN=
       # - TELEGRAM_CHAT_ID=
