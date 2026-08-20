@@ -1,0 +1,44 @@
+{
+  "drop_threshold_percent": 5,
+  "rise_threshold_percent": 10,
+  "min_absolute_change": 1.0,
+  "request_delay_seconds": 2,
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "smtp": {
+    "host": "",
+    "port": 587,
+    "user": "",
+    "password": "",
+    "to": ""
+  },
+  "telegram": {
+    "bot_token": "",
+    "chat_id": ""
+  },
+  "stores": [
+    {
+      "name": "goodr",
+      "type": "shopify",
+      "base_url": "https://goodr.com",
+      "currency": "USD"
+    },
+    {
+      "name": "Knockaround",
+      "type": "shopify",
+      "base_url": "https://knockaround.com",
+      "currency": "USD"
+    },
+    {
+      "name": "Blenders Eyewear",
+      "type": "shopify",
+      "base_url": "https://www.blenderseyewear.com",
+      "currency": "USD"
+    },
+    {
+      "name": "Shady Rays",
+      "type": "shopify",
+      "base_url": "https://shadyrays.com",
+      "currency": "USD"
+    }
+  ]
+}

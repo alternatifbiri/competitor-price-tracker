@@ -1,0 +1,4 @@
+# Coolify Linux'ta build ediyor: bu dosyalar repoda LF olarak dursun.
+* text=auto eol=lf
+*.png binary
+*.jpg binary

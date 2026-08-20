@@ -1,0 +1,10 @@
+tracker.db
+logs/
+exports/
+reports/
+data/
+__pycache__/
+
+# config.json is committed on purpose, the Dockerfile copies it at build
+# time. Keep smtp.password and telegram.bot_token empty in here and put
+# the filled-in config on the deployment volume instead.
