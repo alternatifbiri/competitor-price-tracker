@@ -8,7 +8,10 @@ ENV DATA_DIR=/data \
     PYTHONUNBUFFERED=1 \
     TZ=UTC
 
-RUN pip install --no-cache-dir "httpx>=0.27,<0.29"
+RUN pip install --no-cache-dir \
+    "httpx>=0.27,<0.29" \
+    "gspread>=6.0,<7" \
+    "google-auth>=2.0,<3"
 
 COPY tracker.py config.json ./
 

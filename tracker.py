@@ -8,6 +8,7 @@ reports what changed since last time.
     python tracker.py --run
     python tracker.py --report
     python tracker.py --export-csv
+    python tracker.py --export-sheets
 """
 
 import argparse
@@ -21,7 +22,7 @@ import sqlite3
 import sys
 import time
 import urllib.robotparser
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -65,6 +66,8 @@ ENV_OVERRIDES = {
     "SMTP_USER": ("smtp", "user"),
     "SMTP_PASSWORD": ("smtp", "password"),
     "SMTP_TO": ("smtp", "to"),
+    "GOOGLE_CREDENTIALS_FILE": ("google_sheets", "credentials_file"),
+    "GOOGLE_SPREADSHEET_ID": ("google_sheets", "spreadsheet_id"),
 }
 
 DEFAULTS = {
@@ -119,6 +122,7 @@ def load_config():
         cfg.setdefault(key, value)
     cfg.setdefault("smtp", {})
     cfg.setdefault("telegram", {})
+    cfg.setdefault("google_sheets", {})
     cfg.setdefault("stores", [])
 
     for name, (section, key) in ENV_OVERRIDES.items():
@@ -158,6 +162,8 @@ CREATE TABLE IF NOT EXISTS products (
     store_id    INTEGER NOT NULL REFERENCES stores(id),
     external_id TEXT NOT NULL,
     title       TEXT NOT NULL,
+    product_title TEXT,
+    variant_title TEXT,
     url         TEXT,
     first_seen  TEXT NOT NULL,
     last_seen   TEXT NOT NULL,
@@ -192,6 +198,8 @@ CREATE INDEX IF NOT EXISTS idx_products_store    ON products(store_id, last_seen
 # Columns added after the first release, applied to existing databases.
 MIGRATIONS = [
     ("snapshots", "compare_at_price", "REAL"),
+    ("products", "product_title", "TEXT"),
+    ("products", "variant_title", "TEXT"),
 ]
 
 
@@ -346,6 +354,8 @@ def shopify_items(client, store, user_agent, delay):
                 items.append({
                     "external_id": str(variant.get("id")),
                     "title": title,
+                    "product_title": product_title,
+                    "variant_title": variant_title,
                     "url": f"{base_url}/products/{handle}?variant={variant.get('id')}",
                     "price": parse_price(variant.get("price")),
                     "compare_at_price": parse_price(variant.get("compare_at_price")),
@@ -401,6 +411,8 @@ def html_items(client, store, user_agent, delay):
         items.append({
             "external_id": url,
             "title": title,
+            "product_title": title,
+            "variant_title": "",
             "url": url,
             "price": parse_price(text_of(selectors.get("price"))),
             "compare_at_price": parse_price(text_of(selectors.get("compare_at_price"))),
@@ -612,10 +624,12 @@ def process_store(conn, client, cfg, store, run_ts):
 
         if row is None:
             cursor = conn.execute(
-                "INSERT INTO products (store_id, external_id, title, url, "
-                "first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
-                (store_id, item["external_id"], item["title"], item["url"],
-                 run_ts, run_ts),
+                "INSERT INTO products (store_id, external_id, title, "
+                "product_title, variant_title, url, first_seen, last_seen) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (store_id, item["external_id"], item["title"],
+                 item.get("product_title"), item.get("variant_title"),
+                 item["url"], run_ts, run_ts),
             )
             product_id = cursor.lastrowid
             previous = None
@@ -627,8 +641,10 @@ def process_store(conn, client, cfg, store, run_ts):
             product_id = row["id"]
             previous = latest_snapshot(conn, product_id)
             conn.execute(
-                "UPDATE products SET title = ?, url = ?, last_seen = ? WHERE id = ?",
-                (item["title"], item["url"], run_ts, product_id),
+                "UPDATE products SET title = ?, product_title = ?, "
+                "variant_title = ?, url = ?, last_seen = ? WHERE id = ?",
+                (item["title"], item.get("product_title"),
+                 item.get("variant_title"), item["url"], run_ts, product_id),
             )
 
         conn.execute(
@@ -685,6 +701,13 @@ def cmd_run():
                               store.get("name", "?"), exc)
 
     log.info("run finished, %d new alerts", sum(r["alerts"] for r in results))
+
+    # A sheets failure should not fail the run, the data is already stored.
+    try:
+        push_to_sheets(cfg, conn)
+    except Exception as exc:
+        log.error("google sheets step raised: %s", exc)
+
     conn.close()
 
 
@@ -779,6 +802,135 @@ def send_telegram(cfg, text):
         return False
 
     log.info("telegram sent to chat %s in %d message(s)", chat_id, len(chunks))
+    return True
+
+
+ALERT_HISTORY_DAYS = 30
+
+PRICE_SHEET_HEADER = ["Store", "Product", "Variant", "Price", "Compare At",
+                      "Discount %", "In Stock", "Last Updated", "URL"]
+ALERT_SHEET_HEADER = ["Date", "Store", "Product", "Variant", "Change",
+                      "From", "To", "URL"]
+
+
+def price_sheet_rows(conn):
+    rows = conn.execute(
+        "SELECT s.name AS store, p.title, p.product_title, p.variant_title, "
+        "       p.url, p.last_seen, "
+        "       sn.price, sn.compare_at_price, sn.in_stock "
+        "FROM products p "
+        "JOIN stores s ON s.id = p.store_id "
+        "LEFT JOIN snapshots sn ON sn.id = ("
+        "    SELECT id FROM snapshots WHERE product_id = p.id "
+        "    ORDER BY captured_at DESC, id DESC LIMIT 1) "
+        "ORDER BY s.name, p.title"
+    ).fetchall()
+
+    values = [PRICE_SHEET_HEADER]
+    for row in rows:
+        percent = discount_percent(row["price"], row["compare_at_price"])
+        in_stock = "" if row["in_stock"] is None else (
+            "Yes" if row["in_stock"] else "No")
+        values.append([
+            row["store"],
+            # product_title is empty for rows stored before the column existed
+            row["product_title"] or row["title"],
+            row["variant_title"] or "",
+            row["price"] if row["price"] is not None else "",
+            row["compare_at_price"] if row["compare_at_price"] is not None else "",
+            round(percent, 1) if percent is not None else "",
+            in_stock,
+            row["last_seen"],
+            row["url"] or "",
+        ])
+    return values
+
+
+def alert_sheet_rows(conn, days=ALERT_HISTORY_DAYS):
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(
+        timespec="seconds")
+    rows = conn.execute(
+        "SELECT a.created_at, a.kind, a.old_value, a.new_value, "
+        "       s.name AS store, p.title, p.product_title, p.variant_title, p.url "
+        "FROM alerts a "
+        "JOIN products p ON p.id = a.product_id "
+        "JOIN stores   s ON s.id = p.store_id "
+        "WHERE a.created_at >= ? "
+        "ORDER BY a.created_at DESC, a.id DESC",
+        (cutoff,),
+    ).fetchall()
+
+    values = [ALERT_SHEET_HEADER]
+    for row in rows:
+        values.append([
+            row["created_at"],
+            row["store"],
+            row["product_title"] or row["title"],
+            row["variant_title"] or "",
+            KIND_LABELS.get(row["kind"], row["kind"]),
+            row["old_value"] or "",
+            row["new_value"] or "",
+            row["url"] or "",
+        ])
+    return values
+
+
+def write_worksheet(spreadsheet, name, values):
+    """Replace a worksheet's contents. Rewritten in full every run so the
+    sheet is a mirror of the database rather than an ever growing log."""
+    import gspread
+
+    columns = max(len(row) for row in values)
+    try:
+        worksheet = spreadsheet.worksheet(name)
+    except gspread.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(title=name, rows=len(values) + 100,
+                                              cols=columns)
+    worksheet.clear()
+    # clear() empties the cells but keeps the grid, which can be too small
+    worksheet.resize(rows=max(len(values), 2), cols=columns)
+    worksheet.update(values=values, range_name="A1")
+    worksheet.freeze(rows=1)
+    worksheet.format(f"A1:{chr(ord('A') + columns - 1)}1",
+                     {"textFormat": {"bold": True}})
+    return len(values) - 1
+
+
+def push_to_sheets(cfg, conn):
+    settings = cfg.get("google_sheets", {})
+    credentials_file = settings.get("credentials_file")
+    spreadsheet_id = settings.get("spreadsheet_id")
+
+    if not credentials_file or not spreadsheet_id:
+        log.info("no google sheets config, skipping")
+        return False
+
+    if not Path(credentials_file).exists():
+        log.error("service account file not found: %s", credentials_file)
+        return False
+
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+    except ImportError:
+        log.error("gspread and google-auth are required for sheets, skipping")
+        return False
+
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    try:
+        credentials = Credentials.from_service_account_file(
+            credentials_file, scopes=scopes)
+        spreadsheet = gspread.authorize(credentials).open_by_key(spreadsheet_id)
+
+        prices = write_worksheet(spreadsheet, settings.get("worksheet_name", "Prices"),
+                                 price_sheet_rows(conn))
+        alerts = write_worksheet(spreadsheet, "Alerts", alert_sheet_rows(conn))
+    except Exception as exc:
+        log.error("could not update google sheets: %s", exc)
+        return False
+
+    log.info("google sheets updated: %d products, %d alerts from the last %d days",
+             prices, alerts, ALERT_HISTORY_DAYS)
     return True
 
 
@@ -989,6 +1141,12 @@ def cmd_export_csv():
     log.info("csv written to %s (%d rows)", out_path, len(rows))
 
 
+def cmd_export_sheets():
+    conn = connect()
+    push_to_sheets(load_config(), conn)
+    conn.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Competitor price and stock tracker")
     group = parser.add_mutually_exclusive_group(required=True)
@@ -1000,6 +1158,8 @@ def main():
                        help="report unnotified changes and send them out")
     group.add_argument("--export-csv", action="store_true", dest="export_csv",
                        help="dump the current state to csv")
+    group.add_argument("--export-sheets", action="store_true", dest="export_sheets",
+                       help="push the current state to google sheets")
     args = parser.parse_args()
 
     setup_logging()
@@ -1011,6 +1171,8 @@ def main():
         cmd_report()
     elif args.export_csv:
         cmd_export_csv()
+    elif args.export_sheets:
+        cmd_export_sheets()
 
 
 if __name__ == "__main__":

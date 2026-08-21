@@ -5,6 +5,13 @@ reports/
 data/
 __pycache__/
 
+# Google service account keys, never commit these
+credentials.json
+credentials/
+service-account*.json
+*-service-account.json
+*.credentials.json
+
 # config.json is committed on purpose, the Dockerfile copies it at build
-# time. Keep smtp.password and telegram.bot_token empty in here and put
-# the filled-in config on the deployment volume instead.
+# time. Keep smtp.password, telegram.bot_token and the service account path
+# empty in here and supply the real values through the environment.

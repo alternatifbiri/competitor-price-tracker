@@ -15,6 +15,11 @@
     "bot_token": "",
     "chat_id": ""
   },
+  "google_sheets": {
+    "credentials_file": "",
+    "spreadsheet_id": "",
+    "worksheet_name": "Prices"
+  },
   "stores": [
     {
       "name": "goodr",

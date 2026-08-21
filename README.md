@@ -36,9 +36,10 @@ python tracker.py --init
 Edit `config.json` to point at the stores you care about, then:
 
 ```
-python tracker.py --run           # fetch everything, take a snapshot
-python tracker.py --report        # report changes, send notifications
-python tracker.py --export-csv    # dump current state to csv
+python tracker.py --run            # fetch everything, take a snapshot
+python tracker.py --report         # report changes, send notifications
+python tracker.py --export-csv     # dump current state to csv
+python tracker.py --export-sheets  # push current state to google sheets
 ```
 
 There is no scheduler in the code. Use cron, Task Scheduler or whatever your
@@ -136,6 +137,44 @@ SMTP_HOST   SMTP_PORT   SMTP_USER   SMTP_PASSWORD   SMTP_TO
 Anything set here overrides the matching field in `config.json`. Empty values
 are ignored, so an unset variable falls back to the file.
 
+### Google Sheets
+
+`--run` can mirror the database into a spreadsheet, which is a more convenient
+place to sort and filter than a CSV in a container:
+
+```json
+"google_sheets": {
+  "credentials_file": "credentials.json",
+  "spreadsheet_id": "1AbC...xyz",
+  "worksheet_name": "Prices"
+}
+```
+
+Two worksheets get written. `Prices` holds every tracked product with its
+current price, list price, discount, stock and last seen timestamp. `Alerts`
+holds the last 30 days of detected changes. Both are cleared and rewritten on
+every run, so the sheet is a mirror of the database rather than a log that
+grows forever.
+
+Leave `credentials_file` empty and the step is skipped, same as the other
+channels. `--export-sheets` pushes without running a fetch, which is useful for
+checking the setup.
+
+Getting a service account:
+
+1. In the Google Cloud console create a project and enable the Google Sheets
+   API for it.
+2. Create a service account, then create a JSON key for it and download the
+   file. This file is a credential, keep it out of the repository.
+3. Open the target spreadsheet and share it with the service account's email
+   address (it looks like `name@project.iam.gserviceaccount.com`) with edit
+   permission. Without this step every call comes back as not found, because
+   the service account genuinely cannot see the file.
+4. The `spreadsheet_id` is the long identifier in the sheet's URL, between
+   `/d/` and `/edit`.
+
+Needs `pip install gspread google-auth`.
+
 ## Output
 
 Everything lands under `DATA_DIR` (defaults to the script directory):
@@ -225,7 +264,12 @@ variables instead:
 ```
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
+GOOGLE_CREDENTIALS_FILE=/data/credentials.json
+GOOGLE_SPREADSHEET_ID=...
 ```
+
+The service account key is a file rather than a value, so put it on the volume
+next to the database and point `GOOGLE_CREDENTIALS_FILE` at it.
 
 If you would rather keep the whole config outside the image, put a filled-in
 copy on the volume at `/data/config.json` and set `CONFIG_PATH=/data/config.json`.
