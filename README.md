@@ -158,15 +158,27 @@ CURRENT STATE
   Store                         Items     On sale   Share   Avg off
   Blenders Eyewear               2218          83    3.7%     32.9%
   Knockaround                     802         177   22.1%     39.0%
-  Shady Rays                     4351          26    0.6%     34.9%
+  Shady Rays                      997          26    2.6%     34.9%
   goodr                           606           0    0.0%      0.0%
-  TOTAL                          7977         286    3.6%     36.9%
+  TOTAL                          4623         286    6.2%     36.9%
 
   BIGGEST DISCOUNTS (10)
     -64.3 % Exclusive Offer - Men's Mystery Polarized Pair
            70.00 -> 25.00 USD   [Shady Rays]
   ...
   (2 promotional SKU excluded)
+
+================================================================
+UNREPORTED CHANGES (4)
+
+## Blenders Eyewear  (1)
+  [OUT OF STOCK] Pretty Gangsta
+      https://www.blenderseyewear.com/products/romeo-pretty-gangsta?variant=29389887963205
+
+## goodr  (2)
+  [BACK IN STOCK] Incognito Plant Parent - G00448-CG-01
+      https://goodr.com/products/incognito-plant-parent?variant=41171712409658
+  ...
 ```
 
 Free gifts and service fees are priced at zero, which reads as 100% off and
