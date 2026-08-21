@@ -73,6 +73,33 @@ generates an alert every time it moves by ten cents.
 Drops and rises get separate thresholds because they are not equally
 interesting. A competitor cutting prices matters more than one raising them.
 
+### Filtering out internal SKUs
+
+Some stores publish more than their catalogue through `/products.json`. Shady
+Rays, for example, creates a "Automated Replacement - Processing Fee" product
+for every replacement request, with a timestamp in the variant title. Those
+churn constantly: dozens appear and disappear daily. Left alone they accounted
+for 77% of that store's product count and drowned the change report in
+meaningless additions and removals.
+
+`exclude_patterns` takes case-insensitive regular expressions matched against
+the product title and URL:
+
+```json
+{
+  "name": "Shady Rays",
+  "type": "shopify",
+  "base_url": "https://shadyrays.com",
+  "currency": "USD",
+  "exclude_patterns": ["^Automated Replacement"]
+}
+```
+
+Matching items are never stored, so they stay out of alerts and out of the
+per-store counts. Adding a pattern also deletes anything already stored that
+matches it, which is what keeps the change afterwards from reading as a mass
+removal.
+
 Non-Shopify stores use selectors:
 
 ```json

@@ -38,7 +38,10 @@
       "name": "Shady Rays",
       "type": "shopify",
       "base_url": "https://shadyrays.com",
-      "currency": "USD"
+      "currency": "USD",
+      "exclude_patterns": [
+        "^Automated Replacement"
+      ]
     }
   ]
 }

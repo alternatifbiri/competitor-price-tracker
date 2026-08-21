@@ -474,6 +474,50 @@ def detect_changes(conn, cfg, product_id, title, previous, current, run_ts):
                       f"{old_price:.2f}", f"{new_price:.2f}", run_ts)
 
 
+def compile_exclusions(store):
+    patterns = []
+    for pattern in store.get("exclude_patterns", []):
+        try:
+            patterns.append(re.compile(pattern, re.IGNORECASE))
+        except re.error as exc:
+            log.error("%s: ignoring invalid exclude pattern %r (%s)",
+                      store.get("name", "?"), pattern, exc)
+    return patterns
+
+
+def matches_exclusion(patterns, title, url):
+    haystack = f"{title} {url or ''}"
+    return any(pattern.search(haystack) for pattern in patterns)
+
+
+def purge_excluded(conn, store_id, patterns):
+    """Delete stored products that match the store's exclude patterns.
+
+    Some stores publish internal SKUs through the same catalogue endpoint,
+    for example a per-order replacement fee carrying a timestamp in its
+    variant title. Those churn daily and drown out the real changes.
+
+    Purging matters as much as the filtering itself: without it, adding a
+    pattern would make every already stored match look like it vanished
+    from the catalogue and fire a removal alert for each one.
+    """
+    if not patterns:
+        return 0
+
+    rows = conn.execute(
+        "SELECT id, title, url FROM products WHERE store_id = ?", (store_id,)
+    ).fetchall()
+    ids = [(row["id"],) for row in rows
+           if matches_exclusion(patterns, row["title"], row["url"])]
+    if not ids:
+        return 0
+
+    conn.executemany("DELETE FROM alerts WHERE product_id = ?", ids)
+    conn.executemany("DELETE FROM snapshots WHERE product_id = ?", ids)
+    conn.executemany("DELETE FROM products WHERE id = ?", ids)
+    return len(ids)
+
+
 def flag_removed_products(conn, store_id, run_ts):
     """Alert on products the current run did not see.
 
@@ -532,6 +576,13 @@ def process_store(conn, client, cfg, store, run_ts):
         return {"store": name, "skipped": True, "items": 0, "removed": 0, "alerts": 0}
 
     store_id = upsert_store(conn, dict(store, base_url=base_url))
+
+    exclusions = compile_exclusions(store)
+    purged = purge_excluded(conn, store_id, exclusions)
+    if purged:
+        log.info("%s: dropped %d stored items matching exclude_patterns",
+                 name, purged)
+
     had_previous_run = conn.execute(
         "SELECT COUNT(*) AS c FROM products WHERE store_id = ?", (store_id,)
     ).fetchone()["c"] > 0
@@ -542,6 +593,14 @@ def process_store(conn, client, cfg, store, run_ts):
         items = html_items(client, store, user_agent, delay)
     else:
         raise ValueError(f"unknown store type: {store_type}")
+
+    if exclusions:
+        kept = [item for item in items
+                if not matches_exclusion(exclusions, item["title"], item["url"])]
+        if len(kept) != len(items):
+            log.info("%s: skipped %d fetched items matching exclude_patterns",
+                     name, len(items) - len(kept))
+        items = kept
 
     alerts_before = conn.execute("SELECT COUNT(*) AS c FROM alerts").fetchone()["c"]
 
