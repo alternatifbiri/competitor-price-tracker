@@ -760,7 +760,7 @@ def send_mail(cfg, subject, body):
                 server.login(smtp["user"], smtp.get("password", ""))
             server.send_message(message)
     except Exception as exc:
-        log.error("could not send mail: %s", exc)
+        log.error("could not send mail: %s: %s", type(exc).__name__, exc)
         return False
 
     log.info("mail sent to %s", smtp["to"])
@@ -798,7 +798,8 @@ def send_telegram(cfg, text):
                               response.text[:200])
                     return False
     except Exception as exc:
-        log.error("could not send telegram message: %s", exc)
+        log.error("could not send telegram message: %s: %s",
+                  type(exc).__name__, exc)
         return False
 
     log.info("telegram sent to chat %s in %d message(s)", chat_id, len(chunks))
@@ -926,7 +927,10 @@ def push_to_sheets(cfg, conn):
                                  price_sheet_rows(conn))
         alerts = write_worksheet(spreadsheet, "Alerts", alert_sheet_rows(conn))
     except Exception as exc:
-        log.error("could not update google sheets: %s", exc)
+        # Some client exceptions carry no message at all, so name the class
+        # too or the log line says nothing useful.
+        log.error("could not update google sheets: %s: %s",
+                  type(exc).__name__, exc)
         return False
 
     log.info("google sheets updated: %d products, %d alerts from the last %d days",
